@@ -13,11 +13,11 @@ export const CATEGORY_ORDER = [
 // Se evalúan en orden con el título sin acentos. Para mover un libro concreto basta
 // poner "category" en library/books.json; eso tiene prioridad sobre estas reglas.
 const RULES = [
-  ['Historia de la redención', /patriarcas|profetas y reyes|deseado de todas|hechos de los apostoles|conflicto de los siglos|primeros escritos|historia de la redencion|dones espirituales|eventos de los ultimos/],
-  ['Devocionales', /mi vida hoy|a fin de conocerle|reflejemos a jesus|maranata|hijos e hijas|alza tus ojos|cada dia con dios|meditaciones matinales|dios nos cuida|nuestra elevada vocacion|en los lugares celestiales/],
-  ['Salud, hogar y educación', /ministerio de curacion|consejos sobre (la salud|el regimen|nutricion)|regimen alimenticio|la educacion|educacion cristiana|conduccion del nino|hogar cristiano|temperancia|consejos para los (maestros|padres)|mensajes para los jovenes/],
-  ['Testimonios y consejos', /testimonios|consejos|mensajes selectos|joyas|obreros evangelicos|servicio cristiano|evangelismo|iglesia remanente|notas biograficas/],
-  ['Vida cristiana', /camino a cristo|palabras de vida|discurso maestro|pensamientos del monte|el otro poder|mente,? caracter|la fe por la cual|recibireis poder|parabolas|cristo triunfante|el ministerio de la bondad|vida cristiana|el camino/],
+  ['Historia de la redención', /patriarcas|profetas y reyes|deseado de todas|hechos de los apostoles|conflicto de los siglos|primeros escritos|historia de la redencion|dones espirituales|eventos de los ultimos|conflicto inminente|segunda venida|verdad acerca de los angeles|unica esperanza|cristo en su santuario/],
+  ['Devocionales', /mi vida hoy|a fin de conocerle|reflejemos a jesus|maranata|hijos e hijas|hijas de dios|conflicto y valor|alza tus ojos|cada dia con dios|meditaciones matinales|dios nos cuida|nuestra elevada vocacion|en los lugares celestiales/],
+  ['Salud, hogar y educación', /ministerio de curacion|ministerio medico|consejos sobre (la salud|el regimen|nutricion)|regimen alimenticio|la educacion|educacion cristiana|conduccion del nino|hogar cristiano|temperancia|consejos para los (maestros|padres)|mensajes para los jovenes|cartas a jovenes|de la (cuidad|ciudad) al campo|la musica|la voz/],
+  ['Testimonios y consejos', /testimonios|consejos|mensajes selectos|joyas|obreros evangelicos|servicio cristiano|evangelismo|iglesia remanente|notas biograficas|colportor|ministerio de publicaciones|ministerio pastoral|liderazgo|reavivamientos/],
+  ['Vida cristiana', /camino a cristo|palabras de vida|discurso maestro|pensamientos del monte|el otro poder|mente,? caracter|la fe por la cual|recibireis poder|parabolas|cristo triunfante|cristo nuestro salvador|exaltad|fe y obras|maravillosa gracia|la oracion|semejante a jesus|edificacion del caracter|el ministerio de la bondad|vida cristiana|el camino/],
 ];
 
 export function categoryOf(title) {

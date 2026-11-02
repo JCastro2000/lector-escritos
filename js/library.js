@@ -12,7 +12,10 @@ const PREFS = 'lector.library';
 // `title` (del catálogo) manda sobre el que traiga el EPUB, que a veces viene sin tildes.
 export async function importBuffer(buffer, title) {
   const parsed = await parseEpub(buffer);
-  if (title) parsed.meta.title = title;
+  if (title) {
+    parsed.meta.title = title;
+    parsed.meta.id = slug(title); // mismo identificador que usa el catálogo, para no duplicar el libro
+  }
   return db.saveBook(parsed);
 }
 
