@@ -144,6 +144,12 @@ h1, h2 { line-height: 1.2; }
 .hits + .center { margin-top: 16px; }
 
 /* ---------- Destacados ---------- */
+.colorfilter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -2px 0 8px; }
+.colorfilter .dots { padding: 0; gap: 8px; }
+.colorfilter .dot { width: 32px; height: 32px; border: 2px solid var(--bg); }
+.colorfilter .dot.on { box-shadow: 0 0 0 2px var(--text); }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 16px; font-weight: 600; font-size: .9rem; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .hl-book { font-size: 1rem; color: var(--muted); margin: 26px 0 8px; }
 .hl-card { border-left: 5px solid var(--line); background: var(--surface); border-radius: 4px 14px 14px 4px; padding: 12px 14px 8px; margin-bottom: 12px; }
 .hl-card blockquote { margin: 0 0 6px; font-family: Georgia, serif; }

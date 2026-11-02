@@ -1,7 +1,7 @@
 // Service worker: deja la app disponible sin conexión.
 // Con internet siempre carga la versión más nueva; sin internet (o si la red tarda) usa la guardada.
 // Al cambiar cualquier archivo de la app, sube VERSION.
-const VERSION = 'v12';
+const VERSION = 'v13';
 const CACHE = `lector-${VERSION}`;
 const NETWORK_TIMEOUT_MS = 4000;
 const SHELL = [

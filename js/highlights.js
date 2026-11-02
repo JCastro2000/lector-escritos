@@ -1,6 +1,6 @@
 // Lista de destacados de todos los libros. El respaldo (exportar / importar) está en Ajustes.
 import * as db from './db.js';
-import { h, icon, tabbar, copyText, shareText, confirmAction } from './ui.js';
+import { h, icon, tabbar, copyText, shareText, confirmAction, COLORS, COLOR_NAMES } from './ui.js';
 import { citation, groupHighlights, norm } from './text.js';
 
 const enc = encodeURIComponent;
@@ -10,9 +10,29 @@ export async function mount(root) {
   let all = await db.listHighlights();
   const present = new Set((await db.listBooks()).map((b) => b.id));
   let filter = '';
+  let color = 'all';
 
   const listEl = h('div', { class: 'hl-list' });
   const count = h('span', { class: 'muted' });
+
+  // Filtro por color: "Todos" y un punto por cada color de destacado.
+  const allBtn = h('button', { class: 'chip on', 'aria-pressed': 'true', onclick: () => setColor('all') }, 'Todos');
+  const dots = COLORS.map((c) => h('button', {
+    class: `dot dot-${c}`, 'aria-pressed': 'false', 'aria-label': `Solo ${COLOR_NAMES[c].toLowerCase()}`,
+    onclick: () => setColor(color === c ? 'all' : c), // tocar el color activo vuelve a mostrar todos
+  }));
+  const colorBar = h('div', { class: 'colorfilter' }, allBtn, h('div', { class: 'dots' }, dots));
+
+  function setColor(next) {
+    color = next;
+    allBtn.classList.toggle('on', color === 'all');
+    allBtn.setAttribute('aria-pressed', String(color === 'all'));
+    dots.forEach((d, i) => {
+      d.classList.toggle('on', COLORS[i] === color);
+      d.setAttribute('aria-pressed', String(COLORS[i] === color));
+    });
+    render();
+  }
 
   root.append(h('div', { class: 'page' },
     h('header', { class: 'head' }, h('h1', {}, 'Destacados'), count),
@@ -20,6 +40,7 @@ export async function mount(root) {
       type: 'search', class: 'searchbox', placeholder: 'Buscar en mis destacados…', 'aria-label': 'Buscar en mis destacados',
       oninput: (e) => { filter = norm(e.target.value); render(); },
     }),
+    colorBar,
     listEl),
   tabbar('highlights'));
 
@@ -50,6 +71,7 @@ export async function mount(root) {
   function render() {
     listEl.replaceChildren();
     const groups = groupHighlights(all)
+      .filter((g) => color === 'all' || g.first.color === color)
       .filter((g) => !filter || norm(`${g.first.bookTitle} ${g.items.map((i) => i.text).join(' ')}`).includes(filter));
     count.textContent = all.length ? `${groupHighlights(all).length}` : '';
 
