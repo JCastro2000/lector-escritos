@@ -8,6 +8,15 @@ const BLOCK_SEL = 'p,h1,h2,h3,h4,h5,h6,li';
 const INLINE_OK = new Set(['EM', 'I', 'B', 'STRONG', 'SPAN', 'SUP', 'SUB', 'BR', 'U', 'SMALL', 'CITE', 'Q', 'ABBR']);
 const SKIP_FILE = /^(cover|toc|titlepage|nav)\b/i;
 
+// Las portadas se guardan como texto (data URL): en iPhone los archivos guardados en la base
+// de datos a veces quedan inservibles tras cerrar la app y la imagen sale rota.
+export const toDataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(blob);
+});
+
 const parseXml = (s) => new DOMParser().parseFromString(s, 'application/xml');
 const byName = (root, name) => [...root.getElementsByTagNameNS('*', name)];
 
@@ -114,7 +123,7 @@ export async function parseEpub(buffer) {
   const coverItem = manifest.get(coverId) || [...manifest.values()].find((i) => i.props.includes('cover-image'));
   if (coverItem) {
     const bytes = await zip.bytes(coverItem.href);
-    if (bytes) cover = new Blob([bytes], { type: coverItem.type || 'image/jpeg' });
+    if (bytes) cover = await toDataUrl(new Blob([bytes], { type: coverItem.type || 'image/jpeg' }));
   }
 
   const title = field('title') || 'Sin título';

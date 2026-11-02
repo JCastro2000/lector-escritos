@@ -1,6 +1,6 @@
 // Biblioteca: todos los libros (descargados y disponibles), favoritos, importar EPUB y descargar del catálogo.
 import * as db from './db.js';
-import { parseEpub } from './epub.js';
+import { parseEpub, toDataUrl } from './epub.js';
 import { CATEGORY_ORDER, categoryOf, loadRemote } from './catalog.js';
 import { norm, slug } from './text.js';
 import { h, icon, toast, tabbar } from './ui.js';
@@ -81,11 +81,47 @@ export async function mount(root) {
     fab,
     tabbar('library'));
 
-  const coverUrl = (blob) => {
-    const url = URL.createObjectURL(blob);
-    urls.push(url);
-    return url;
-  };
+  // Portada de un libro descargado. Si falla (o no hay), se prueba la del catálogo y al final un recuadro con el título.
+  function coverImg(it, { lazy = true } = {}) {
+    const stored = it.book?.cover;
+    let src = typeof stored === 'string' ? stored : null;
+    if (stored && !src) {
+      src = URL.createObjectURL(stored); // portada guardada con el formato anterior; se repara en segundo plano
+      urls.push(src);
+    }
+    const fallback = it.entry?.cover ? `library/${it.entry.cover}` : null;
+    if (!src && !fallback) return placeholder(it.title);
+    const img = h('img', { src: src ?? fallback, alt: '', loading: lazy ? 'lazy' : null });
+    img.addEventListener('error', () => {
+      if (fallback && !img.src.endsWith(fallback)) img.src = fallback;
+      else img.replaceWith(placeholder(it.title));
+    });
+    return img;
+  }
+
+  // Convierte las portadas guardadas con el formato anterior, o que faltan, y las guarda como texto.
+  let repairing = false;
+  async function repairCovers() {
+    if (repairing) return;
+    repairing = true;
+    let changed = false;
+    for (const book of books) {
+      if (typeof book.cover === 'string') continue;
+      const entry = remote.find((e) => slug(e.title) === book.id);
+      try {
+        let data = null;
+        if (book.cover) data = await toDataUrl(book.cover).catch(() => null);
+        if (!data && entry?.cover) data = await toDataUrl(await (await fetch(`library/${entry.cover}`)).blob());
+        if (data) {
+          await db.updateBook(book.id, { cover: data });
+          book.cover = data;
+          changed = true;
+        }
+      } catch { /* sin conexión: se reintenta en la próxima apertura */ }
+    }
+    repairing = false;
+    if (changed) render();
+  }
 
   // ---------- Datos ----------
   // Un solo listado: lo descargado más lo del catálogo que aún no está en el dispositivo.
@@ -148,9 +184,7 @@ export async function mount(root) {
   function tile(it) {
     const downloaded = !!it.book;
     const loading = busy.has(it.id);
-    const cover = it.book?.cover ? h('img', { src: coverUrl(it.book.cover), alt: '', loading: 'lazy' })
-      : it.entry?.cover ? h('img', { src: `library/${it.entry.cover}`, alt: '', loading: 'lazy' })
-        : placeholder(it.title);
+    const cover = coverImg(it);
     const badge = downloaded
       ? h('span', { class: 'badge ok', title: 'Descargado' }, icon('check', 16))
       : h('span', { class: 'badge', title: 'Toca para descargar' }, loading ? h('span', { class: 'spin' }) : icon('download', 16));
@@ -196,7 +230,7 @@ export async function mount(root) {
     if (last && prefs.mode !== 'favorites') {
       const chapter = last.toc[last.pos?.c ?? 0];
       body.append(h('a', { class: 'continue', href: `#/read/${enc(last.id)}` },
-        h('div', { class: 'cover small' }, last.cover ? h('img', { src: coverUrl(last.cover), alt: '' }) : placeholder(last.title)),
+        h('div', { class: 'cover small' }, coverImg({ book: last, entry: remote.find((e) => slug(e.title) === last.id), title: last.title }, { lazy: false })),
         h('div', {},
           h('div', { class: 'eyebrow' }, 'Continuar leyendo'),
           h('div', { class: 'continue-title' }, last.title),
@@ -238,6 +272,7 @@ export async function mount(root) {
   loadRemote().then((list) => {
     remote = list;
     if (list.length) render();
+    repairCovers();
   });
 
   return () => urls.forEach((u) => URL.revokeObjectURL(u));
