@@ -9,7 +9,7 @@ destacados y ajustes de lectura. Todo se guarda en el dispositivo; no hay servid
 python -m http.server 8099 --directory "G:/Mi unidad/APP/lector"
 ```
 
-Abrir http://localhost:8099 e importar los EPUB con el botón **Importar**.
+Abrir http://localhost:8099. Los libros salen de `library/books.json` (ver más abajo).
 
 ## Instalar en el teléfono
 
@@ -18,16 +18,15 @@ Abrir http://localhost:8099 e importar los EPUB con el botón **Importar**.
 
 ## Libros
 
-Por defecto la app se publica **sin libros**: cada persona importa sus EPUB (descargados para uso
-personal). El `.gitignore` bloquea `*.epub` y `library/books.json` para que no se publiquen por accidente.
+Los libros los sube solo el administrador; la app no permite importar archivos. Cada persona los
+descarga tocándolos en la biblioteca (quedan guardados para leer sin conexión).
 
-### Ofrecer libros para descargar desde la app
+### Subir o agregar libros
 
-Solo si cuentas con autorización para alojarlos (los textos en español de Elena G. de White tienen
-derechos de autor):
+Los textos en español de Elena G. de White tienen derechos de autor; publícalos solo si cuentas con
+autorización.
 
-1. Quita las dos líneas de `.gitignore`.
-2. Ejecuta, con la carpeta donde tienes los EPUB:
+1. Ejecuta, con la carpeta donde tienes los EPUB:
 
    ```bash
    node tools/make-catalog.mjs "G:/Mi unidad/APP/EW"
@@ -36,7 +35,7 @@ derechos de autor):
    Esto copia los libros a `library/` y crea `library/books.json`. El título del catálogo es el
    nombre del archivo; para fijar la categoría de un libro añade `"category": "Vida cristiana"` en
    su entrada (la herramienta lo conserva al volver a ejecutarse).
-3. Sube los cambios (`git add . && git commit && git push`). La app mostrará los libros como
+2. Sube los cambios (`git add . && git commit && git push`). La app mostrará los libros como
    "Disponibles" (con nube) y los de cada teléfono con una marca verde cuando estén descargados.
 
 Categorías: Historia de la redención, Vida cristiana, Testimonios y consejos, Salud, hogar y

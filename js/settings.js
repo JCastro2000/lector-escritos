@@ -1,6 +1,6 @@
 // Ajustes de lectura (tema, letra, tamaño…) y pantalla de Ajustes.
-import * as db from './db.js';
-import { h, icon, tabbar, toast, saveFile, installPrompt } from './ui.js';
+import { backupStatus, describeLast, exportHighlights, importHighlights } from './backup.js';
+import { h, icon, tabbar, toast, installPrompt } from './ui.js';
 
 const KEY = 'lector.settings';
 const DEFAULTS = { theme: 'auto', font: 'serif', size: 19, line: 1.65, measure: 'medium', justify: false };
@@ -118,39 +118,44 @@ function installSection() {
   return box;
 }
 
-function backupSection() {
+async function backupSection() {
+  const status = await backupStatus();
+  const state = h('p', { class: 'muted' });
+  const showStatus = (s) => {
+    state.textContent = `${s.total} ${s.total === 1 ? 'destacado' : 'destacados'} · ${describeLast(s)}${s.pending && s.last ? ` ${s.pending} nuevos sin respaldar.` : ''}`;
+  };
+  showStatus(status);
+
   const fileInput = h('input', {
     type: 'file', accept: 'application/json,.json', hidden: true,
     onchange: async () => {
       const file = fileInput.files[0];
       fileInput.value = '';
-      if (!file) return;
-      try {
-        const data = JSON.parse(await file.text());
-        const valid = (data.highlights ?? []).filter((x) => x?.id && x.bookId && Number.isInteger(x.start) && Number.isInteger(x.end) && x.text);
-        if (!valid.length) throw new Error('vacío');
-        await db.putHighlights(valid);
-        toast(`${valid.length} destacados importados`);
-      } catch {
-        toast('El archivo no es un respaldo válido', 4000);
-      }
+      if (file && await importHighlights(file)) showStatus(await backupStatus());
     },
   });
   return h('section', { class: 'card' },
     h('h2', {}, 'Respaldo de destacados'),
-    h('p', { class: 'muted' }, 'Tus destacados viven en este dispositivo. Guarda un respaldo para pasarlos a otro teléfono o recuperarlos si borras los datos del navegador.'),
+    h('p', { class: 'muted' }, 'Tus destacados se guardan en este teléfono. Para que nunca se pierdan (si cambias de teléfono, borras la app o los datos del navegador), guarda un respaldo en Archivos, iCloud, Drive o envíatelo por WhatsApp. Para recuperarlos, usa Importar.'),
+    state,
     h('div', { class: 'row' },
       h('button', {
-        class: 'btn',
+        class: 'btn primary',
         onclick: async () => {
-          const all = await db.listHighlights();
-          if (!all.length) return toast('Aún no tienes destacados');
-          const data = JSON.stringify({ app: 'lector-escritos', version: 1, exported: new Date().toISOString(), highlights: all }, null, 1);
-          await saveFile(`destacados-${new Date().toISOString().slice(0, 10)}.json`, new Blob([data], { type: 'application/json' }));
+          if (await exportHighlights()) showStatus(await backupStatus());
         },
-      }, icon('download', 18), 'Exportar'),
+      }, icon('download', 18), 'Guardar respaldo'),
       h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Importar')),
     fileInput);
+}
+
+async function appVersion() {
+  try {
+    const versions = (await caches.keys()).filter((k) => k.startsWith('lector-v')).map((k) => +k.slice('lector-v'.length));
+    return versions.length ? `v${Math.max(...versions)}` : null;
+  } catch {
+    return null;
+  }
 }
 
 async function storageSection() {
@@ -188,11 +193,12 @@ export async function mount(root) {
       settingsPanel(),
       h('article', { class: 'rtext preview' },
         h('p', { class: 'standard-indented' }, 'Así se verá el texto al leer. Ajusta el tema, el tamaño y la letra hasta que leer sea cómodo.'))),
-    backupSection(),
+    await backupSection(),
     installSection(),
     await storageSection(),
     h('section', { class: 'card' },
       h('h2', {}, 'Acerca de'),
-      h('p', { class: 'muted' }, 'Lector de Escritos guarda todo en este dispositivo: los libros, tu posición y tus destacados. Nada se envía a ningún servidor.'))),
+      h('p', { class: 'muted' }, 'Lector de Escritos guarda todo en este dispositivo: los libros, tu posición y tus destacados. Nada se envía a ningún servidor.'),
+      h('p', { class: 'muted small' }, `Versión de la app: ${(await appVersion()) ?? 'sin instalar'}`))),
   tabbar('settings'));
 }

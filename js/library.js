@@ -46,10 +46,6 @@ export async function mount(root) {
   let favs = new Set(readJson(FAVS, { ids: [] }).ids);
 
   const body = h('div', { class: 'lib-body' });
-  const fileInput = h('input', {
-    type: 'file', accept: '.epub,application/epub+zip', multiple: true, hidden: true,
-    onchange: () => importFiles([...fileInput.files]),
-  });
   // Búsqueda por título: se abre con el botón flotante y se queda fija arriba.
   const titleInput = h('input', {
     type: 'search', class: 'searchbox', placeholder: 'Buscar un libro por título…', 'aria-label': 'Buscar un libro por título',
@@ -79,11 +75,9 @@ export async function mount(root) {
 
   root.append(
     h('div', { class: 'page' },
-      h('header', { class: 'head' }, h('h1', {}, 'Mi biblioteca'),
-        h('button', { class: 'btn', onclick: () => fileInput.click() }, icon('plus', 18), 'Importar')),
+      h('header', { class: 'head' }, h('h1', {}, 'Mi biblioteca')),
       searchBar,
       body),
-    fileInput,
     fab,
     tabbar('library'));
 
@@ -125,24 +119,6 @@ export async function mount(root) {
   }
 
   // ---------- Acciones ----------
-  async function importFiles(files) {
-    let ok = 0;
-    for (const [i, file] of files.entries()) {
-      toast(`Importando ${i + 1} de ${files.length}…`, 60000);
-      try {
-        await importBuffer(await file.arrayBuffer());
-        ok++;
-      } catch (e) {
-        console.error(e);
-        toast(`No se pudo importar "${file.name}": ${e.message}`, 5000);
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-    fileInput.value = '';
-    if (ok) toast(ok === 1 ? 'Libro importado' : `${ok} libros importados`);
-    await refresh();
-  }
-
   async function download(it, quiet = false) {
     busy.add(it.id);
     render();
@@ -166,11 +142,6 @@ export async function mount(root) {
   // Tocar un libro de la nube lo descarga (para leerlo también sin conexión) y lo abre.
   async function openRemote(it) {
     if (await download(it, true)) location.hash = `#/read/${enc(it.id)}`;
-  }
-
-  async function refresh() {
-    books = await db.listBooks();
-    render();
   }
 
   // ---------- Piezas ----------
@@ -214,9 +185,8 @@ export async function mount(root) {
     if (!all.length) {
       body.append(h('div', { class: 'empty' },
         icon('book', 48),
-        h('h2', {}, 'Aún no tienes libros'),
-        h('p', {}, 'Importa libros en formato EPUB desde tu teléfono o computador. Quedan guardados en este dispositivo y se pueden leer sin conexión.'),
-        h('button', { class: 'btn primary', onclick: () => fileInput.click() }, icon('plus', 18), 'Importar libros (.epub)')));
+        h('h2', {}, 'No hay libros disponibles'),
+        h('p', {}, 'Conéctate a internet y abre la biblioteca de nuevo para ver los libros que puedes descargar.')));
       return;
     }
 

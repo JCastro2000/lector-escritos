@@ -144,6 +144,8 @@ h1, h2 { line-height: 1.2; }
 .hits + .center { margin-top: 16px; }
 
 /* ---------- Destacados ---------- */
+.reminder { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-left: 4px solid var(--accent); border-radius: 4px 14px 14px 4px; padding: 10px 14px; margin-bottom: 14px; }
+.reminder p { margin: 0; font-size: .92rem; }
 .hl-book { font-size: 1rem; color: var(--muted); margin: 26px 0 8px; }
 .hl-card { border-left: 5px solid var(--line); background: var(--surface); border-radius: 4px 14px 14px 4px; padding: 12px 14px 8px; margin-bottom: 12px; }
 .hl-card blockquote { margin: 0 0 6px; font-family: Georgia, serif; }

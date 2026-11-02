@@ -152,9 +152,9 @@ export async function saveFile(name, blob) {
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: name });
-      return;
+      return true;
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError') return false;
     }
   }
   const a = h('a', { href: URL.createObjectURL(blob), download: name });
@@ -162,4 +162,5 @@ export async function saveFile(name, blob) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
 }
