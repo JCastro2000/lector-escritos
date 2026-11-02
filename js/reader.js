@@ -296,8 +296,64 @@ export async function mount(root, ctx) {
     }
   });
 
+  // ---------- Ir a una página ----------
+  // Si la página empieza a mitad de un párrafo, centra y resalta su marcador [n].
+  function focusPageMarker(n) {
+    const marker = [...textEl.querySelectorAll('.pagebreak')].find((el) => el.textContent === `[${n}]`);
+    if (!marker) return;
+    marker.scrollIntoView({ block: 'center' });
+    marker.classList.add('pulse');
+    setTimeout(() => marker.classList.remove('pulse'), 3000);
+  }
+
+  // La página n empieza justo después de su marcador [n] (que va al final del párrafo anterior).
+  async function findPage(n) {
+    const marker = `>[${n}]<`;
+    let best = null;
+    let anyPage = false;
+    for (let c = 0; c < book.toc.length; c++) {
+      const ch = await db.getChapter(book.id, c);
+      for (let i = 0; i < ch.blocks.length; i++) {
+        const blk = ch.blocks[i];
+        const at = blk.h.indexOf(marker);
+        if (at >= 0) {
+          const atEnd = blk.h.length - at - marker.length < 30;
+          if (!atEnd) return { c, b: i };
+          if (i + 1 < ch.blocks.length) return { c, b: i + 1 };
+          return c + 1 < book.toc.length ? { c: c + 1, b: 0 } : { c, b: i };
+        }
+        if (blk.p) {
+          anyPage = true;
+          if (blk.p > n) return best ?? { c, b: i }; // las páginas van en orden: ya nos pasamos
+          best = { c, b: i };
+        }
+      }
+    }
+    return anyPage ? { missing: true } : { none: true };
+  }
+
   // ---------- Contenido (capítulos y destacados del libro) ----------
   function openContents() {
+    const pageInput = h('input', { type: 'number', min: '1', inputmode: 'numeric', class: 'searchbox', placeholder: 'Ir a la página…', 'aria-label': 'Ir a la página' });
+    const pageMsg = h('p', { class: 'muted small' });
+    const pageForm = h('form', {
+      class: 'gotopage',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const n = parseInt(pageInput.value, 10);
+        if (!(n > 0)) return void (pageMsg.textContent = 'Escribe un número de página.');
+        pageMsg.textContent = 'Buscando…';
+        const r = await findPage(n);
+        if (r.c != null) {
+          sheet.close();
+          await show(r.c, r.b);
+          focusPageMarker(n);
+        } else {
+          pageMsg.textContent = r.none ? 'Este libro no tiene números de página.' : `La página ${n} no está en este libro.`;
+        }
+      },
+    }, pageInput, h('button', { class: 'btn primary', type: 'submit' }, 'Ir'));
+
     const chapters = h('ol', { class: 'toc' }, book.toc.map((title, i) =>
       h('li', {}, h('button', { class: i === chapterIdx ? 'on' : '', onclick: () => { sheet.close(); go(i); } }, title))));
 
@@ -321,7 +377,7 @@ export async function mount(root, ctx) {
     const b2 = h('button', { onclick: () => pick('marks', b2) }, `Destacados (${groups.length})`);
     tabs.append(b1, b2);
 
-    const sheet = openSheet(book.title, h('div', {}, tabs, panes));
+    const sheet = openSheet(book.title, h('div', {}, pageForm, pageMsg, tabs, panes));
     chapters.querySelector('.on')?.scrollIntoView({ block: 'center' });
   }
 

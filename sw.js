@@ -1,14 +1,14 @@
 // Service worker: deja la app disponible sin conexión.
 // Con internet siempre carga la versión más nueva; sin internet (o si la red tarda) usa la guardada.
 // Al cambiar cualquier archivo de la app, sube VERSION.
-const VERSION = 'v14';
+const VERSION = 'v16';
 const CACHE = `lector-${VERSION}`;
 const NETWORK_TIMEOUT_MS = 4000;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/ui.js', 'js/db.js', 'js/zip.js', 'js/epub.js', 'js/text.js',
   'js/catalog.js', 'js/settings.js', 'js/backup.js', 'js/library.js', 'js/reader.js', 'js/search.js', 'js/highlights.js',
-  'js/favorites.js', 'js/sync.js', 'js/firebase-config.js',
+  'js/favorites.js', 'js/sync.js', 'js/firebase-config.js', 'js/downloads.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

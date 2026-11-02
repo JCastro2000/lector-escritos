@@ -32,7 +32,8 @@ autorización.
    node tools/make-catalog.mjs "G:/Mi unidad/APP/EW"
    ```
 
-   Esto copia los libros a `library/` y crea `library/books.json`. El título del catálogo es el
+   Esto copia los libros a `library/`, extrae las portadas (`library/covers`), genera sus miniaturas
+   (`library/thumbs`, solo en Windows) y crea `library/books.json`. El título del catálogo es el
    nombre del archivo; para fijar la categoría de un libro añade `"category": "Vida cristiana"` en
    su entrada (la herramienta lo conserva al volver a ejecutarse).
 2. Sube los cambios (`git add . && git commit && git push`). La app mostrará los libros como

@@ -1,5 +1,6 @@
 // Ajustes de lectura (tema, letra, tamaño…) y pantalla de Ajustes.
 import { events } from './db.js';
+import { downloadCard } from './downloads.js';
 import * as sync from './sync.js';
 import { backupStatus, describeLast, exportHighlights, importHighlights } from './backup.js';
 import { h, icon, tabbar, toast, installPrompt } from './ui.js';
@@ -258,6 +259,7 @@ async function storageSection() {
 
 export async function mount(root) {
   const account = accountSection();
+  const missingBooks = downloadCard({ intro: (info) => `Tienes ${info.downloaded} de ${info.total} libros descargados.` });
   root.append(h('div', { class: 'page' },
     h('header', { class: 'head' }, h('h1', {}, 'Ajustes')),
     account.box,
@@ -268,11 +270,15 @@ export async function mount(root) {
         h('p', { class: 'standard-indented' }, 'Así se verá el texto al leer. Ajusta el tema, el tamaño y la letra hasta que leer sea cómodo.'))),
     await backupSection(),
     installSection(),
+    missingBooks.el,
     await storageSection(),
     h('section', { class: 'card' },
       h('h2', {}, 'Acerca de'),
       h('p', { class: 'muted' }, 'Lector de Escritos guarda los libros, tu posición y tus destacados en este dispositivo. Si inicias sesión, tus citas, favoritos y posición también se guardan en tu cuenta; los libros no se suben.'),
       h('p', { class: 'muted small' }, `Versión de la app: ${(await appVersion()) ?? 'sin instalar'}`))),
   tabbar('settings'));
-  return account.dispose;
+  return () => {
+    account.dispose();
+    missingBooks.dispose();
+  };
 }

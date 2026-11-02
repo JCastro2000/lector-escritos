@@ -17,6 +17,18 @@ export const toDataUrl = (blob) => new Promise((resolve, reject) => {
   reader.readAsDataURL(blob);
 });
 
+// Reduce una portada a una miniatura (≈240 px de ancho, JPEG): de ~115 KB baja a ~15 KB.
+export async function shrinkCover(blob, width = 240) {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, width / bitmap.width);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL('image/jpeg', 0.78);
+}
+
 const parseXml = (s) => new DOMParser().parseFromString(s, 'application/xml');
 const byName = (root, name) => [...root.getElementsByTagNameNS('*', name)];
 
@@ -123,7 +135,10 @@ export async function parseEpub(buffer) {
   const coverItem = manifest.get(coverId) || [...manifest.values()].find((i) => i.props.includes('cover-image'));
   if (coverItem) {
     const bytes = await zip.bytes(coverItem.href);
-    if (bytes) cover = await toDataUrl(new Blob([bytes], { type: coverItem.type || 'image/jpeg' }));
+    if (bytes) {
+      const blob = new Blob([bytes], { type: coverItem.type || 'image/jpeg' });
+      cover = await shrinkCover(blob).catch(() => toDataUrl(blob));
+    }
   }
 
   const title = field('title') || 'Sin título';

@@ -110,7 +110,15 @@ export async function deleteBook(id) {
   notify('books');
 }
 
+// Cuántos capítulos hay en el índice de búsqueda (de un libro o de todos).
+export async function countSearch(bookId) {
+  const db = await open();
+  const store = db.transaction('search').objectStore('search');
+  return request(bookId ? store.index('bookId').count(IDBKeyRange.only(bookId)) : store.count());
+}
+
 // Recorre el índice de búsqueda (de un libro o de todos), un capítulo por vez.
+// Si `visit` devuelve false, se detiene (por ejemplo, porque ya hay otra búsqueda más nueva).
 export async function scanSearch(bookId, visit) {
   const db = await open();
   const store = db.transaction('search').objectStore('search');
@@ -118,8 +126,7 @@ export async function scanSearch(bookId, visit) {
   await new Promise((resolve, reject) => {
     cursor.onsuccess = () => {
       const c = cursor.result;
-      if (!c) return resolve();
-      visit(c.value);
+      if (!c || visit(c.value) === false) return resolve();
       c.continue();
     };
     cursor.onerror = () => reject(cursor.error);

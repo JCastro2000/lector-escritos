@@ -1,23 +1,17 @@
 // Biblioteca: todos los libros (descargados y disponibles), favoritos, importar EPUB y descargar del catálogo.
 import * as db from './db.js';
 import * as favorites from './favorites.js';
-import { parseEpub, toDataUrl } from './epub.js';
+import { shrinkCover, toDataUrl } from './epub.js';
 import { CATEGORY_ORDER, categoryOf, loadRemote } from './catalog.js';
+import { downloadCard, fetchBook, importBuffer } from './downloads.js';
 import { norm, slug } from './text.js';
 import { h, icon, toast, tabbar } from './ui.js';
 
+export { importBuffer };
+
 const enc = encodeURIComponent;
 const PREFS = 'lector.library';
-
-// `title` (del catálogo) manda sobre el que traiga el EPUB, que a veces viene sin tildes.
-export async function importBuffer(buffer, title) {
-  const parsed = await parseEpub(buffer);
-  if (title) {
-    parsed.meta.title = title;
-    parsed.meta.id = slug(title); // mismo identificador que usa el catálogo, para no duplicar el libro
-  }
-  return db.saveBook(parsed);
-}
+const DISMISS_KEY = 'lector.dlDismissed';
 
 const readJson = (key, fallback) => {
   try {
@@ -30,6 +24,12 @@ const writeJson = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch { /* sin almacenamiento: vale solo durante esta sesión */ }
+};
+
+// Portada de un libro del catálogo: la miniatura si existe (pesa mucho menos), si no la imagen completa.
+const remoteCover = (entry) => {
+  const file = entry?.thumb ?? entry?.cover;
+  return file ? `library/${file}` : null;
 };
 
 function placeholder(title) {
@@ -75,10 +75,17 @@ export async function mount(root) {
     }
   }
 
+  // Ofrece descargar toda la biblioteca (nunca automático): así se puede buscar citas en todos los libros.
+  const allBooks = downloadCard({
+    intro: 'Descarga toda la biblioteca para leer sin internet y buscar citas en todos los libros.',
+    dismissKey: DISMISS_KEY,
+  });
+
   root.append(
     h('div', { class: 'page' },
       h('header', { class: 'head' }, h('h1', {}, 'Mi biblioteca')),
       searchBar,
+      allBooks.el,
       body),
     fab,
     tabbar('library'));
@@ -91,7 +98,7 @@ export async function mount(root) {
       src = URL.createObjectURL(stored); // portada guardada con el formato anterior; se repara en segundo plano
       urls.push(src);
     }
-    const fallback = it.entry?.cover ? `library/${it.entry.cover}` : null;
+    const fallback = remoteCover(it.entry);
     if (!src && !fallback) return placeholder(it.title);
     const img = h('img', { src: src ?? fallback, alt: '', loading: lazy ? 'lazy' : null });
     img.addEventListener('error', () => {
@@ -101,21 +108,29 @@ export async function mount(root) {
     return img;
   }
 
-  // Convierte las portadas guardadas con el formato anterior, o que faltan, y las guarda como texto.
+  // Arregla las portadas guardadas: pasa a texto las del formato anterior, repone las que faltan
+  // y reduce las que son demasiado pesadas (miniaturas de ~15 KB en vez de ~115 KB).
+  const BIG_COVER = 60000;
   let repairing = false;
   async function repairCovers() {
     if (repairing) return;
     repairing = true;
     let changed = false;
     for (const book of books) {
-      if (typeof book.cover === 'string') continue;
       const entry = remote.find((e) => slug(e.title) === book.id);
       try {
         let data = null;
-        if (book.cover) data = await toDataUrl(book.cover).catch(() => null);
-        if (!data && entry?.cover) data = await toDataUrl(await (await fetch(`library/${entry.cover}`)).blob());
+        if (typeof book.cover === 'string') {
+          if (book.cover.length <= BIG_COVER) continue;
+          data = await shrinkCover(await (await fetch(book.cover)).blob());
+        } else {
+          if (book.cover) data = await toDataUrl(book.cover).catch(() => null);
+          const url = remoteCover(entry);
+          if (!data && url) data = await toDataUrl(await (await fetch(url)).blob());
+          if (data && data.length > BIG_COVER) data = await shrinkCover(await (await fetch(data)).blob());
+        }
         if (data) {
-          await db.updateBook(book.id, { cover: data });
+          await db.updateBook(book.id, { cover: data }, { silent: true });
           book.cover = data;
           changed = true;
         }
@@ -158,7 +173,7 @@ export async function mount(root) {
     busy.add(it.id);
     render();
     try {
-      const res = await fetch(new URL(it.entry.file, new URL('library/', location.href)));
+      const res = await fetchBook(it.entry);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await importBuffer(await res.arrayBuffer(), it.title);
       if (!quiet) toast(`"${it.title}" descargado`);
@@ -275,15 +290,22 @@ export async function mount(root) {
   });
 
   // Cambios de favoritos o de libros (propios o llegados de la nube) se reflejan al instante.
+  // (Con la descarga masiva llegan muchos avisos seguidos: se agrupan para no redibujar 91 veces.)
   const onFavorites = () => render();
-  const onBooks = async () => {
-    books = await db.listBooks();
-    render();
+  let booksTimer;
+  const onBooks = () => {
+    clearTimeout(booksTimer);
+    booksTimer = setTimeout(async () => {
+      books = await db.listBooks();
+      render();
+    }, 400);
   };
   db.events.addEventListener('favorites', onFavorites);
   db.events.addEventListener('books', onBooks);
 
   return () => {
+    clearTimeout(booksTimer);
+    allBooks.dispose();
     db.events.removeEventListener('favorites', onFavorites);
     db.events.removeEventListener('books', onBooks);
     urls.forEach((u) => URL.revokeObjectURL(u));

@@ -5,6 +5,8 @@
 // Copia cada EPUB a library/ con un nombre limpio y genera library/books.json,
 // que la app lee para ofrecer los libros como "Disponibles para descargar".
 // Si ya existe un books.json, conserva la "category" que hayas escrito a mano.
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
 import { readZip } from '../js/zip.js';
@@ -65,6 +67,19 @@ for (const name of files) {
   const category = categoryByTitle.get(slug(title));
   if (category) entry.category = category;
   catalog.push(entry);
+}
+
+// Miniaturas de las portadas (la biblioteca las usa en lugar de la imagen completa). Solo en Windows.
+if (process.platform === 'win32') {
+  const run = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'tools', 'make-thumbs.ps1'), join(outDir, 'covers'), join(outDir, 'thumbs')], { encoding: 'utf8' });
+  if (run.status !== 0) console.warn('No se pudieron generar las miniaturas:', run.stderr || run.stdout);
+} else {
+  console.warn('Miniaturas omitidas (requiere Windows); la app usará la portada completa.');
+}
+for (const entry of catalog) {
+  if (entry.cover && existsSync(join(outDir, 'thumbs', `${basename(entry.cover, extname(entry.cover))}.jpg`))) {
+    entry.thumb = `thumbs/${basename(entry.cover, extname(entry.cover))}.jpg`;
+  }
 }
 
 await writeFile(jsonPath, JSON.stringify(catalog, null, 2) + '\n');
