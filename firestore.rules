@@ -1,0 +1,22 @@
+// Reglas de seguridad de Firestore.
+//
+// Cada persona solo accede a sus propios datos (users/{su uid}/...) y solo si su correo de Google
+// (verificado) está autorizado: debe existir un documento en la colección "allowed" cuyo ID sea el
+// correo en minúsculas, por ejemplo allowed/persona@gmail.com. Esa colección solo se edita desde la
+// consola de Firebase: los clientes no pueden leerla ni escribirla. Todo lo demás queda denegado.
+//
+// Se publican en Firebase Console → Firestore Database → Reglas.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autorizado() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/allowed/$(request.auth.token.email));
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if autorizado() && request.auth.uid == uid;
+    }
+  }
+}

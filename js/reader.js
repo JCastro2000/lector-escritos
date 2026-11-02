@@ -325,7 +325,18 @@ export async function mount(root, ctx) {
     chapters.querySelector('.on')?.scrollIntoView({ block: 'center' });
   }
 
+  // Destacados que llegan de otro dispositivo mientras lees este libro.
+  const onRemoteHighlights = async (e) => {
+    if (!e.detail?.remote || !chapter) return;
+    const touched = new Set(hls.filter((x) => x.chapter === chapterIdx).map((x) => x.block));
+    hls = await db.listHighlights(book.id);
+    hls.filter((x) => x.chapter === chapterIdx).forEach((x) => touched.add(x.block));
+    if (sel?.kind === 'hl') hideBar();
+    touched.forEach(paintBlock);
+  };
+
   // ---------- Arranque ----------
+  db.events.addEventListener('highlights', onRemoteHighlights);
   addEventListener('scroll', onScroll, { passive: true });
   addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', onVisibility);
@@ -339,6 +350,7 @@ export async function mount(root, ctx) {
 
   return () => {
     flush();
+    db.events.removeEventListener('highlights', onRemoteHighlights);
     removeEventListener('scroll', onScroll);
     removeEventListener('pagehide', flush);
     document.removeEventListener('visibilitychange', onVisibility);

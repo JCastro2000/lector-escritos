@@ -41,6 +41,21 @@ autorización.
 Categorías: Historia de la redención, Vida cristiana, Testimonios y consejos, Salud, hogar y
 educación, Devocionales y Otros libros (`js/catalog.js`).
 
+## Cuentas y sincronización (Firebase)
+
+Opcional. Con **Continuar con Google** (Ajustes → Cuenta) se sincronizan destacados, favoritos y
+posición de lectura entre dispositivos. Sin cuenta, todo queda en el dispositivo.
+
+- Proyecto Firebase: `lector-escritos-ew`; la configuración pública está en `js/firebase-config.js`.
+- Solo sincronizan los correos autorizados: en Firebase Console → Firestore Database → Datos, la
+  colección `allowed` tiene un documento por persona, con **el correo en minúsculas como ID** y
+  cualquier campo (por ejemplo `activo = si`). Para dar acceso a alguien, agrega su documento; para
+  quitarlo, bórralo.
+- Las reglas de seguridad están en `firestore.rules` (se publican en Firestore → Reglas): cada
+  persona solo lee y escribe sus propios datos y solo si su correo está autorizado.
+- Authentication: proveedor Google habilitado, correo/contraseña inhabilitado, dominio
+  `jcastro2000.github.io` autorizado.
+
 ## Al cambiar la app
 
 Sube `VERSION` en `sw.js` para que los teléfonos descarguen la versión nueva.

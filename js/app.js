@@ -6,6 +6,7 @@ import * as reader from './reader.js';
 import * as search from './search.js';
 import * as highlights from './highlights.js';
 import * as settings from './settings.js';
+import * as sync from './sync.js';
 
 const VIEWS = { library, read: reader, search, highlights, settings };
 
@@ -22,6 +23,8 @@ if ('serviceWorker' in navigator) {
 }
 
 history.scrollRestoration = 'manual';
+
+sync.start(); // solo hace algo si ya hay una sesión iniciada en este dispositivo
 
 function parseHash() {
   const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');

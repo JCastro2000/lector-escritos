@@ -1,5 +1,6 @@
 // Biblioteca: todos los libros (descargados y disponibles), favoritos, importar EPUB y descargar del catálogo.
 import * as db from './db.js';
+import * as favorites from './favorites.js';
 import { parseEpub, toDataUrl } from './epub.js';
 import { CATEGORY_ORDER, categoryOf, loadRemote } from './catalog.js';
 import { norm, slug } from './text.js';
@@ -7,7 +8,6 @@ import { h, icon, toast, tabbar } from './ui.js';
 
 const enc = encodeURIComponent;
 const PREFS = 'lector.library';
-const FAVS = 'lector.favorites';
 
 // `title` (del catálogo) manda sobre el que traiga el EPUB, que a veces viene sin tildes.
 export async function importBuffer(buffer, title) {
@@ -43,7 +43,6 @@ export async function mount(root) {
   const busy = new Set();
   const prefs = readJson(PREFS, { mode: 'all', sort: 'category' });
   if (prefs.mode !== 'favorites') prefs.mode = 'all'; // la pestaña "Descargados" ya no existe
-  let favs = new Set(readJson(FAVS, { ids: [] }).ids);
 
   const body = h('div', { class: 'lib-body' });
   // Búsqueda por título: se abre con el botón flotante y se queda fija arriba.
@@ -136,7 +135,7 @@ export async function mount(root) {
     for (const it of map.values()) {
       const wanted = it.entry?.category;
       it.category = CATEGORY_ORDER.includes(wanted) ? wanted : categoryOf(it.title);
-      it.fav = favs.has(it.id);
+      it.fav = favorites.isFav(it.id);
     }
     return [...map.values()];
   }
@@ -148,10 +147,7 @@ export async function mount(root) {
   }
 
   function toggleFav(it) {
-    if (favs.has(it.id)) favs.delete(it.id);
-    else favs.add(it.id);
-    writeJson(FAVS, { ids: [...favs] });
-    render();
+    favorites.toggle(it.id); // avisa con 'favorites' y la biblioteca se redibuja
   }
 
   // ---------- Acciones ----------
@@ -275,5 +271,18 @@ export async function mount(root) {
     repairCovers();
   });
 
-  return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  // Cambios de favoritos o de libros (propios o llegados de la nube) se reflejan al instante.
+  const onFavorites = () => render();
+  const onBooks = async () => {
+    books = await db.listBooks();
+    render();
+  };
+  db.events.addEventListener('favorites', onFavorites);
+  db.events.addEventListener('books', onBooks);
+
+  return () => {
+    db.events.removeEventListener('favorites', onFavorites);
+    db.events.removeEventListener('books', onBooks);
+    urls.forEach((u) => URL.revokeObjectURL(u));
+  };
 }

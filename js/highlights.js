@@ -73,4 +73,13 @@ export async function mount(root) {
   }
 
   render();
+
+  // Destacados que llegan de otro dispositivo aparecen sin salir de la pantalla.
+  const onRemote = async (e) => {
+    if (!e.detail?.remote) return;
+    all = await db.listHighlights();
+    render();
+  };
+  db.events.addEventListener('highlights', onRemote);
+  return () => db.events.removeEventListener('highlights', onRemote);
 }

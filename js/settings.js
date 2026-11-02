@@ -1,4 +1,6 @@
 // Ajustes de lectura (tema, letra, tamaño…) y pantalla de Ajustes.
+import { events } from './db.js';
+import * as sync from './sync.js';
 import { backupStatus, describeLast, exportHighlights, importHighlights } from './backup.js';
 import { h, icon, tabbar, toast, installPrompt } from './ui.js';
 
@@ -118,6 +120,75 @@ function installSection() {
   return box;
 }
 
+const ago = (t) => {
+  const min = Math.floor((Date.now() - t) / 60000);
+  if (min < 1) return 'hace un momento';
+  if (min < 60) return `hace ${min} min`;
+  return `hace ${Math.floor(min / 60)} h`;
+};
+
+// Cuenta: con sesión iniciada, las citas, favoritos y posición se guardan también en la nube.
+function accountSection() {
+  const note = h('p', { class: 'muted small' });
+  let busy = false;
+
+  // La ventana de Google debe abrirse directamente al tocar el botón, así que el SDK se descarga antes.
+  sync.preload();
+  const login = h('button', {
+    class: 'btn primary',
+    onclick: async () => {
+      if (busy) return;
+      busy = true;
+      login.disabled = true;
+      note.textContent = 'Abriendo Google…';
+      try {
+        await sync.signInWithGoogle();
+        note.textContent = '';
+      } catch (err) {
+        note.textContent = sync.friendlyError(err);
+      }
+      busy = false;
+      login.disabled = false;
+      render();
+    },
+  }, 'Continuar con Google');
+  const form = h('div', { class: 'stack' },
+    h('p', { class: 'muted' }, 'Inicia sesión con tu cuenta de Google para ver tus citas, favoritos y posición de lectura en todos tus dispositivos y que queden guardados en la nube. Solo entran los correos que autorice quien administra la app. Sin cuenta, la app funciona igual y todo queda en este dispositivo.'),
+    login,
+    note);
+
+  const who = h('p', {});
+  const status = h('p', { class: 'muted' });
+  const signed = h('div', { class: 'stack' }, who, status,
+    h('div', { class: 'row' },
+      h('button', { class: 'btn', onclick: () => sync.syncNow() }, 'Sincronizar ahora'),
+      h('button', {
+        class: 'btn',
+        onclick: async () => {
+          await sync.signOut();
+          render();
+        },
+      }, 'Cerrar sesión')));
+
+  function render() {
+    const acc = sync.account();
+    form.hidden = !!acc;
+    signed.hidden = !acc;
+    if (!acc) return;
+    who.textContent = `Sesión iniciada: ${acc.email}`;
+    const { phase, last, error } = sync.state;
+    status.textContent = phase === 'syncing' ? 'Sincronizando…'
+      : phase === 'error' ? error
+        : phase === 'offline' ? 'Sin conexión: se sincronizará al volver.'
+          : last ? `Sincronizado ${ago(last)}.` : 'Conectando…';
+  }
+
+  render();
+  events.addEventListener('sync', render);
+  const box = h('section', { class: 'card' }, h('h2', {}, 'Cuenta'), form, signed);
+  return { box, dispose: () => events.removeEventListener('sync', render) };
+}
+
 async function backupSection() {
   const status = await backupStatus();
   const state = h('p', { class: 'muted' });
@@ -186,8 +257,10 @@ async function storageSection() {
 }
 
 export async function mount(root) {
+  const account = accountSection();
   root.append(h('div', { class: 'page' },
     h('header', { class: 'head' }, h('h1', {}, 'Ajustes')),
+    account.box,
     h('section', { class: 'card' },
       h('h2', {}, 'Lectura'),
       settingsPanel(),
@@ -198,7 +271,8 @@ export async function mount(root) {
     await storageSection(),
     h('section', { class: 'card' },
       h('h2', {}, 'Acerca de'),
-      h('p', { class: 'muted' }, 'Lector de Escritos guarda todo en este dispositivo: los libros, tu posición y tus destacados. Nada se envía a ningún servidor.'),
+      h('p', { class: 'muted' }, 'Lector de Escritos guarda los libros, tu posición y tus destacados en este dispositivo. Si inicias sesión, tus citas, favoritos y posición también se guardan en tu cuenta; los libros no se suben.'),
       h('p', { class: 'muted small' }, `Versión de la app: ${(await appVersion()) ?? 'sin instalar'}`))),
   tabbar('settings'));
+  return account.dispose;
 }
