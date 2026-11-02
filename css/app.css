@@ -94,6 +94,10 @@ h1, h2 { line-height: 1.2; }
 .empty h2 { margin: 6px 0 0; color: var(--text); }
 .empty p { max-width: 30rem; margin: 0 0 8px; }
 
+.libsearch { position: sticky; top: 0; z-index: 10; padding: calc(env(safe-area-inset-top) + 8px) 0 4px; background: var(--bg); }
+.libsearch .searchbox { margin: 0; }
+.fab { position: fixed; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 25; width: 56px; height: 56px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .3); }
+.fab:active { transform: scale(.95); }
 .lib-tools { display: grid; gap: 0 12px; margin-top: 14px; }
 .lib-tools .segmented { margin-bottom: 8px; }
 @media (min-width: 640px) { .lib-tools { grid-template-columns: 1.6fr 1fr; } }

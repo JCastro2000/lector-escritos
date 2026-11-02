@@ -50,12 +50,41 @@ export async function mount(root) {
     type: 'file', accept: '.epub,application/epub+zip', multiple: true, hidden: true,
     onchange: () => importFiles([...fileInput.files]),
   });
+  // Búsqueda por título: se abre con el botón flotante y se queda fija arriba.
+  const titleInput = h('input', {
+    type: 'search', class: 'searchbox', placeholder: 'Buscar un libro por título…', 'aria-label': 'Buscar un libro por título',
+    autocomplete: 'off', enterkeyhint: 'search',
+    oninput: () => {
+      filter = titleInput.value;
+      render();
+    },
+  });
+  const searchBar = h('div', { class: 'libsearch', hidden: true }, titleInput);
+  const fab = h('button', { class: 'fab', 'aria-label': 'Buscar un libro por título', onclick: toggleSearch }, icon('search', 24));
+
+  function toggleSearch() {
+    const opening = searchBar.hidden;
+    searchBar.hidden = !opening;
+    fab.replaceChildren(icon(opening ? 'close' : 'search', 24));
+    fab.setAttribute('aria-label', opening ? 'Cerrar la búsqueda' : 'Buscar un libro por título');
+    if (opening) {
+      window.scrollTo(0, 0);
+      titleInput.focus();
+    } else {
+      titleInput.value = '';
+      filter = '';
+      render();
+    }
+  }
+
   root.append(
     h('div', { class: 'page' },
       h('header', { class: 'head' }, h('h1', {}, 'Mi biblioteca'),
         h('button', { class: 'btn', onclick: () => fileInput.click() }, icon('plus', 18), 'Importar')),
+      searchBar,
       body),
     fileInput,
+    fab,
     tabbar('library'));
 
   const coverUrl = (blob) => {
@@ -139,16 +168,6 @@ export async function mount(root) {
     if (await download(it, true)) location.hash = `#/read/${enc(it.id)}`;
   }
 
-  async function downloadAll(list) {
-    let done = 0;
-    for (const it of list) {
-      toast(`Descargando ${done + 1} de ${list.length}…`, 60000);
-      if (!(await download(it, true))) return;
-      done++;
-    }
-    toast(`${done} libros descargados`);
-  }
-
   async function refresh() {
     books = await db.listBooks();
     render();
@@ -219,20 +238,6 @@ export async function mount(root) {
         prefs.mode, (mode) => savePrefs({ mode })),
       segmented([['category', 'Por categoría'], ['az', 'A–Z']], prefs.sort, (sort) => savePrefs({ sort }))));
 
-    if (all.length > 6) {
-      body.append(h('input', {
-        type: 'search', class: 'searchbox', placeholder: 'Filtrar por título…', value: filter, 'aria-label': 'Filtrar por título',
-        oninput: (e) => {
-          filter = e.target.value;
-          const caret = e.target.selectionStart;
-          render();
-          const again = body.querySelector('.searchbox');
-          again.focus();
-          again.setSelectionRange(caret, caret);
-        },
-      }));
-    }
-
     const term = norm(filter);
     const shown = all
       .filter((i) => prefs.mode !== 'favorites' || i.fav)
@@ -244,13 +249,8 @@ export async function mount(root) {
       return;
     }
 
-    const missing = shown.filter((i) => !i.book);
-    const downloadBtn = missing.length > 1 && prefs.mode === 'all'
-      ? h('button', { class: 'btn small', onclick: () => downloadAll(missing) }, icon('download', 16), `Descargar los ${missing.length} que faltan`)
-      : null;
-
     if (prefs.sort === 'az') {
-      body.append(shelf('Todos los libros', shown.map(tile), downloadBtn));
+      body.append(shelf('Todos los libros', shown.map(tile)));
       return;
     }
 
@@ -259,11 +259,8 @@ export async function mount(root) {
       if (!groups.has(it.category)) groups.set(it.category, []);
       groups.get(it.category).push(it);
     }
-    let first = true;
     for (const cat of CATEGORY_ORDER) {
-      if (!groups.has(cat)) continue;
-      body.append(shelf(cat, groups.get(cat).map(tile), first ? downloadBtn : null));
-      first = false;
+      if (groups.has(cat)) body.append(shelf(cat, groups.get(cat).map(tile)));
     }
   }
 
