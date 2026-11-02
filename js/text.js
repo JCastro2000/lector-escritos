@@ -55,18 +55,43 @@ export function makeMatcher(query) {
   };
 }
 
-// ntext debe venir de norm(). Devuelve { rank, ranges } o null.
+// Tramo más corto del texto que contiene todas las palabras (una de cada una).
+function tightestSpan(found) {
+  const marks = found.flatMap((ranges, i) => ranges.map(([s, e]) => [s, e, i])).sort((a, b) => a[0] - b[0]);
+  const count = new Array(found.length).fill(0);
+  let have = 0;
+  let best = Infinity;
+  for (let lo = 0, hi = 0; hi < marks.length; hi++) {
+    if (count[marks[hi][2]]++ === 0) have++;
+    while (have === found.length) {
+      best = Math.min(best, Math.max(...marks.slice(lo, hi + 1).map((x) => x[1])) - marks[lo][0]);
+      if (--count[marks[lo][2]] === 0) have--;
+      lo++;
+    }
+  }
+  return best;
+}
+
+// ntext debe venir de norm(). Devuelve { rank, score, ranges } o null.
+// score (mayor = más parecido) solo sirve para ordenar entre resultados del mismo rank:
+// frase exacta → más veces y ocupando más del párrafo; palabras sueltas → más juntas entre sí.
 export function matchText(ntext, m) {
   const exact = findAll(ntext, m.phrase);
-  if (exact.length) return { rank: 0, ranges: exact };
+  if (exact.length) {
+    const covered = exact.reduce((a, [s, e]) => a + e - s, 0);
+    return { rank: 0, score: exact.length + covered / ntext.length, ranges: exact };
+  }
   if (m.phraseOnly || m.tokens.length < 2) return null;
-  const all = [];
+  const found = [];
   for (const re of m.words) {
     const r = findAll(ntext, re);
     if (!r.length) return null;
-    all.push(...r);
+    found.push(r);
   }
-  return { rank: 1, ranges: mergeRanges(all) };
+  const ranges = mergeRanges(found.flat());
+  const covered = ranges.reduce((a, [s, e]) => a + e - s, 0);
+  const wordsLen = m.tokens.join('').length;
+  return { rank: 1, score: wordsLen / Math.max(tightestSpan(found), wordsLen) + covered / ntext.length, ranges };
 }
 
 export const cleanQuote = (t) => t.replace(/\s*\[\d+\]\s*/g, ' ').replace(/ {2,}/g, ' ').trim();

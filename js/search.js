@@ -6,6 +6,7 @@ import { downloadCard, job, missing } from './downloads.js';
 
 const enc = encodeURIComponent;
 const PAGE = 40;
+const RANKED_MAX = 15; // hasta aquí los resultados se ordenan por parecido
 const template = document.createElement('template');
 const plain = (html) => {
   template.innerHTML = html;
@@ -172,16 +173,19 @@ export async function mount(root, ctx) {
       if (id !== runId) return false; // llegó una búsqueda más nueva
       for (let b = 0; b < rec.norms.length; b++) {
         const r = matchText(rec.norms[b], matcher);
-        if (r) found.push({ bookId: rec.bookId, idx: rec.idx, b, rank: r.rank, ranges: r.ranges });
+        if (r) found.push({ bookId: rec.bookId, idx: rec.idx, b, rank: r.rank, score: r.score, ranges: r.ranges });
       }
       if (++seen % 500 === 0 && total > 1000) status.textContent = `Buscando… ${Math.round((seen * 100) / total)} %`;
     });
     if (id !== runId) return;
 
-    found.sort((a, b) => a.rank - b.rank || (order.get(a.bookId) ?? 0) - (order.get(b.bookId) ?? 0) || a.idx - b.idx || a.b - b.b);
+    // Con pocos resultados se ordenan del que más se parece al que menos; con muchos, por libro.
+    const byParecido = found.length > 1 && found.length <= RANKED_MAX;
+    const inBook = (a, b) => (order.get(a.bookId) ?? 0) - (order.get(b.bookId) ?? 0) || a.idx - b.idx || a.b - b.b;
+    found.sort((a, b) => a.rank - b.rank || (byParecido && b.score - a.score) || inBook(a, b));
     hits = found;
     status.textContent = found.length
-      ? `${found.length} ${found.length === 1 ? 'resultado' : 'resultados'}`
+      ? `${found.length} ${found.length === 1 ? 'resultado' : 'resultados'}${byParecido ? ' · del más al menos parecido' : ''}`
       : `Sin resultados. Prueba con menos palabras o sin acentos.${!onlyBook && totalBooks > books.length ? ' Recuerda que solo se busca en los libros descargados.' : ''}`;
     await more(id);
   }
