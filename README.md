@@ -49,8 +49,11 @@ posición de lectura entre dispositivos. Sin cuenta, todo queda en el dispositiv
 - Proyecto Firebase: `lector-escritos-ew`; la configuración pública está en `js/firebase-config.js`.
 - Solo sincronizan los correos autorizados: en Firebase Console → Firestore Database → Datos, la
   colección `allowed` tiene un documento por persona, con **el correo en minúsculas como ID** y
-  cualquier campo (por ejemplo `activo = si`). Para dar acceso a alguien, agrega su documento; para
-  quitarlo, bórralo.
+  cualquier campo (por ejemplo `activo = si`).
+- **Alta automática:** la primera vez que alguien entra con Google, la app crea su documento en
+  `allowed`. Las reglas solo lo permiten mientras `config/acceso` tenga `abierto = "si"`. Para
+  **cerrar las altas nuevas**, cambia ese campo a `"no"` (quienes ya están siguen igual). Para quitar
+  a alguien, borra su documento en `allowed` (con las altas cerradas no puede volver a entrar).
 - Las reglas de seguridad están en `firestore.rules` (se publican en Firestore → Reglas): cada
   persona solo lee y escribe sus propios datos y solo si su correo está autorizado.
 - Authentication: proveedor Google habilitado, correo/contraseña inhabilitado, dominio

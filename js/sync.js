@@ -153,8 +153,24 @@ async function attach(user) {
   store.set(ACCOUNT_KEY, JSON.stringify({ uid: user.uid, email: user.email }));
   uid = user.uid;
   setState({ phase: 'syncing', error: '' });
+  await joinIfOpen(user);
   await subscribe();
   schedule(0);
+}
+
+// Alta automática: la primera vez que alguien entra con Google se agrega su correo a "allowed".
+// Las reglas solo lo permiten mientras config/acceso tenga abierto = "si"; el administrador lo
+// cambia a "no" en Firebase para cerrar las altas nuevas sin afectar a quienes ya están.
+async function joinIfOpen(user) {
+  if (!user.email) return;
+  try {
+    const { fs, db: cloud } = await load();
+    const ref = fs.doc(cloud, 'allowed', user.email);
+    if ((await fs.getDoc(ref)).exists()) return;
+    await fs.setDoc(ref, { activo: 'si', fecha: fs.serverTimestamp() });
+  } catch {
+    // Altas cerradas o sin conexión: si no está autorizado, la sincronización lo avisará.
+  }
 }
 
 function detach(signedOut) {
