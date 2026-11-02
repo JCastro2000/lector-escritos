@@ -1,5 +1,6 @@
 // Ajustes de lectura (tema, letra, tamaño…) y pantalla de Ajustes.
-import { h, tabbar, toast, installPrompt } from './ui.js';
+import * as db from './db.js';
+import { h, icon, tabbar, toast, saveFile, installPrompt } from './ui.js';
 
 const KEY = 'lector.settings';
 const DEFAULTS = { theme: 'auto', font: 'serif', size: 19, line: 1.65, measure: 'medium', justify: false };
@@ -117,6 +118,41 @@ function installSection() {
   return box;
 }
 
+function backupSection() {
+  const fileInput = h('input', {
+    type: 'file', accept: 'application/json,.json', hidden: true,
+    onchange: async () => {
+      const file = fileInput.files[0];
+      fileInput.value = '';
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        const valid = (data.highlights ?? []).filter((x) => x?.id && x.bookId && Number.isInteger(x.start) && Number.isInteger(x.end) && x.text);
+        if (!valid.length) throw new Error('vacío');
+        await db.putHighlights(valid);
+        toast(`${valid.length} destacados importados`);
+      } catch {
+        toast('El archivo no es un respaldo válido', 4000);
+      }
+    },
+  });
+  return h('section', { class: 'card' },
+    h('h2', {}, 'Respaldo de destacados'),
+    h('p', { class: 'muted' }, 'Tus destacados viven en este dispositivo. Guarda un respaldo para pasarlos a otro teléfono o recuperarlos si borras los datos del navegador.'),
+    h('div', { class: 'row' },
+      h('button', {
+        class: 'btn',
+        onclick: async () => {
+          const all = await db.listHighlights();
+          if (!all.length) return toast('Aún no tienes destacados');
+          const data = JSON.stringify({ app: 'lector-escritos', version: 1, exported: new Date().toISOString(), highlights: all }, null, 1);
+          await saveFile(`destacados-${new Date().toISOString().slice(0, 10)}.json`, new Blob([data], { type: 'application/json' }));
+        },
+      }, icon('download', 18), 'Exportar'),
+      h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Importar')),
+    fileInput);
+}
+
 async function storageSection() {
   const box = h('section', { class: 'card' }, h('h2', {}, 'Almacenamiento'));
   const info = h('p', { class: 'muted' }, 'Calculando…');
@@ -130,12 +166,16 @@ async function storageSection() {
   }
   if (navigator.storage?.persist) {
     const persisted = await navigator.storage.persisted();
-    box.append(persisted
-      ? h('p', { class: 'muted' }, 'Los datos están protegidos contra borrado automático.')
-      : h('button', {
-        class: 'btn',
-        onclick: async () => toast((await navigator.storage.persist()) ? 'Datos protegidos' : 'El navegador no lo permitió'),
-      }, 'Proteger mis datos'));
+    if (persisted) {
+      box.append(h('p', { class: 'muted' }, 'Tus libros y destacados están protegidos: el teléfono no los borrará solo.'));
+    } else {
+      box.append(
+        h('p', { class: 'muted' }, 'Si al teléfono le falta espacio, puede borrar por su cuenta los datos de apps que no usas hace tiempo. Este botón le pide que conserve tus libros y destacados.'),
+        h('button', {
+          class: 'btn',
+          onclick: async () => toast((await navigator.storage.persist()) ? 'Datos protegidos' : 'El teléfono no lo permitió; no pasa nada', 4000),
+        }, 'Proteger mis datos'));
+    }
   }
   return box;
 }
@@ -148,6 +188,7 @@ export async function mount(root) {
       settingsPanel(),
       h('article', { class: 'rtext preview' },
         h('p', { class: 'standard-indented' }, 'Así se verá el texto al leer. Ajusta el tema, el tamaño y la letra hasta que leer sea cómodo.'))),
+    backupSection(),
     installSection(),
     await storageSection(),
     h('section', { class: 'card' },

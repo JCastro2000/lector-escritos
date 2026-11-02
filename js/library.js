@@ -3,7 +3,7 @@ import * as db from './db.js';
 import { parseEpub } from './epub.js';
 import { CATEGORY_ORDER, categoryOf, loadRemote } from './catalog.js';
 import { norm, slug } from './text.js';
-import { h, icon, toast, openSheet, tabbar } from './ui.js';
+import { h, icon, toast, tabbar } from './ui.js';
 
 const enc = encodeURIComponent;
 const PREFS = 'lector.library';
@@ -42,6 +42,7 @@ export async function mount(root) {
   let filter = '';
   const busy = new Set();
   const prefs = readJson(PREFS, { mode: 'all', sort: 'category' });
+  if (prefs.mode !== 'favorites') prefs.mode = 'all'; // la pestaña "Descargados" ya no existe
   let favs = new Set(readJson(FAVS, { ids: [] }).ids);
 
   const body = h('div', { class: 'lib-body' });
@@ -153,23 +154,6 @@ export async function mount(root) {
     render();
   }
 
-  function bookMenu(it) {
-    const { book } = it;
-    const sheet = openSheet(book.title, h('div', { class: 'stack' },
-      h('p', { class: 'muted' }, [book.author, `${book.toc.length} capítulos`].filter(Boolean).join(' · ')),
-      h('button', { class: 'btn', onclick: () => { sheet.close(); toggleFav(it); } }, icon('star', 18), it.fav ? 'Quitar de favoritos' : 'Añadir a favoritos'),
-      h('p', { class: 'muted' }, 'Quitarlo libera espacio en este dispositivo. Tus destacados se conservan.'),
-      h('button', {
-        class: 'btn danger',
-        onclick: async () => {
-          sheet.close();
-          await db.deleteBook(book.id);
-          toast('Libro eliminado del dispositivo');
-          refresh();
-        },
-      }, icon('trash', 18), 'Eliminar del dispositivo')));
-  }
-
   // ---------- Piezas ----------
   function tile(it) {
     const downloaded = !!it.book;
@@ -190,8 +174,7 @@ export async function mount(root) {
         class: `tile-fav iconbtn${it.fav ? ' on' : ''}`, 'aria-pressed': it.fav ? 'true' : 'false',
         'aria-label': it.fav ? `Quitar ${it.title} de favoritos` : `Añadir ${it.title} a favoritos`,
         onclick: () => toggleFav(it),
-      }, icon('star', 18)),
-      downloaded && h('button', { class: 'tile-more iconbtn', 'aria-label': `Opciones de ${it.title}`, onclick: () => bookMenu(it) }, icon('more', 18)));
+      }, icon('star', 18)));
   }
 
   const shelf = (title, tiles, action) => h('section', { class: 'shelf' },
@@ -218,7 +201,7 @@ export async function mount(root) {
       return;
     }
 
-    const counts = { all: all.length, downloaded: all.filter((i) => i.book).length, favorites: all.filter((i) => i.fav).length };
+    const counts = { all: all.length, favorites: all.filter((i) => i.fav).length };
 
     const last = books.filter((b) => b.lastRead).sort((a, b) => b.lastRead - a.lastRead)[0];
     if (last && prefs.mode !== 'favorites') {
@@ -232,7 +215,7 @@ export async function mount(root) {
     }
 
     body.append(h('div', { class: 'lib-tools' },
-      segmented([['all', `Todos ${counts.all}`], ['downloaded', `Descargados ${counts.downloaded}`], ['favorites', `Favoritos ${counts.favorites}`]],
+      segmented([['all', `Todos ${counts.all}`], ['favorites', `Favoritos ${counts.favorites}`]],
         prefs.mode, (mode) => savePrefs({ mode })),
       segmented([['category', 'Por categoría'], ['az', 'A–Z']], prefs.sort, (sort) => savePrefs({ sort }))));
 
@@ -252,14 +235,12 @@ export async function mount(root) {
 
     const term = norm(filter);
     const shown = all
-      .filter((i) => (prefs.mode === 'downloaded' ? i.book : prefs.mode === 'favorites' ? i.fav : true))
+      .filter((i) => prefs.mode !== 'favorites' || i.fav)
       .filter((i) => !term || norm(i.title).includes(term))
       .sort((a, b) => a.title.localeCompare(b.title, 'es'));
 
     if (!shown.length) {
-      body.append(h('p', { class: 'muted center pad' }, term ? 'Ningún libro coincide.'
-        : prefs.mode === 'favorites' ? 'Marca libros con la estrella para verlos aquí.'
-          : 'No hay libros descargados todavía.'));
+      body.append(h('p', { class: 'muted center pad' }, term ? 'Ningún libro coincide.' : 'Marca libros con la estrella para verlos aquí.'));
       return;
     }
 

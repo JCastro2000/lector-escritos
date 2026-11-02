@@ -1,6 +1,6 @@
-// Lista de destacados de todos los libros, con respaldo (exportar / importar).
+// Lista de destacados de todos los libros. El respaldo (exportar / importar) está en Ajustes.
 import * as db from './db.js';
-import { h, icon, toast, tabbar, copyText, shareText, saveFile, confirmAction } from './ui.js';
+import { h, icon, tabbar, copyText, shareText, confirmAction } from './ui.js';
 import { citation, groupHighlights, norm } from './text.js';
 
 const enc = encodeURIComponent;
@@ -12,7 +12,6 @@ export async function mount(root) {
   let filter = '';
 
   const listEl = h('div', { class: 'hl-list' });
-  const fileInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup });
   const count = h('span', { class: 'muted' });
 
   root.append(h('div', { class: 'page' },
@@ -21,38 +20,8 @@ export async function mount(root) {
       type: 'search', class: 'searchbox', placeholder: 'Buscar en mis destacados…', 'aria-label': 'Buscar en mis destacados',
       oninput: (e) => { filter = norm(e.target.value); render(); },
     }),
-    listEl,
-    h('section', { class: 'card' },
-      h('h2', {}, 'Respaldo'),
-      h('p', { class: 'muted' }, 'Tus destacados viven en este dispositivo. Guarda un respaldo para pasarlos a otro teléfono o recuperarlos si borras los datos del navegador.'),
-      h('div', { class: 'row' },
-        h('button', { class: 'btn', onclick: exportBackup }, icon('download', 18), 'Exportar'),
-        h('button', { class: 'btn', onclick: () => fileInput.click() }, 'Importar')))),
-  fileInput,
+    listEl),
   tabbar('highlights'));
-
-  async function exportBackup() {
-    if (!all.length) return toast('Aún no tienes destacados');
-    const data = JSON.stringify({ app: 'lector-escritos', version: 1, exported: new Date().toISOString(), highlights: all }, null, 1);
-    await saveFile(`destacados-${new Date().toISOString().slice(0, 10)}.json`, new Blob([data], { type: 'application/json' }));
-  }
-
-  async function importBackup() {
-    const file = fileInput.files[0];
-    fileInput.value = '';
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      const valid = (data.highlights ?? []).filter((x) => x?.id && x.bookId && Number.isInteger(x.start) && Number.isInteger(x.end) && x.text);
-      if (!valid.length) throw new Error('vacío');
-      await db.putHighlights(valid);
-      all = await db.listHighlights();
-      render();
-      toast(`${valid.length} destacados importados`);
-    } catch {
-      toast('El archivo no es un respaldo válido', 4000);
-    }
-  }
 
   function card(g) {
     const first = g.first;
