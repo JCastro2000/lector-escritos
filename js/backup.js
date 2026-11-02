@@ -3,7 +3,6 @@ import * as db from './db.js';
 import { saveFile, toast } from './ui.js';
 
 const KEY = 'lector.lastBackup';
-const REMIND_AFTER_DAYS = 7;
 
 const lastBackup = () => {
   try {
@@ -19,7 +18,7 @@ export async function backupStatus() {
   const last = lastBackup();
   const pending = all.filter((x) => x.created > last).length;
   const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
-  return { total: all.length, pending, last, days, due: pending > 0 && (days === null || days >= REMIND_AFTER_DAYS) };
+  return { total: all.length, pending, last, days };
 }
 
 export function describeLast({ last, days }) {

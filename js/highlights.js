@@ -1,6 +1,5 @@
 // Lista de destacados de todos los libros. El respaldo (exportar / importar) está en Ajustes.
 import * as db from './db.js';
-import { backupStatus, exportHighlights } from './backup.js';
 import { h, icon, tabbar, copyText, shareText, confirmAction } from './ui.js';
 import { citation, groupHighlights, norm } from './text.js';
 
@@ -15,26 +14,8 @@ export async function mount(root) {
   const listEl = h('div', { class: 'hl-list' });
   const count = h('span', { class: 'muted' });
 
-  // Aviso para que las citas no dependan de un solo teléfono.
-  const reminder = h('div', { class: 'reminder', hidden: true });
-  backupStatus().then((s) => {
-    if (!s.due) return;
-    reminder.hidden = false;
-    reminder.append(
-      h('p', {}, s.last
-        ? `Tienes ${s.pending} ${s.pending === 1 ? 'destacado nuevo' : 'destacados nuevos'} sin respaldar.`
-        : 'Aún no has respaldado tus destacados. Guárdalos para no perderlos si cambias de teléfono.'),
-      h('button', {
-        class: 'btn small primary',
-        onclick: async () => {
-          if (await exportHighlights()) reminder.hidden = true;
-        },
-      }, 'Guardar respaldo'));
-  });
-
   root.append(h('div', { class: 'page' },
     h('header', { class: 'head' }, h('h1', {}, 'Destacados'), count),
-    reminder,
     h('input', {
       type: 'search', class: 'searchbox', placeholder: 'Buscar en mis destacados…', 'aria-label': 'Buscar en mis destacados',
       oninput: (e) => { filter = norm(e.target.value); render(); },
