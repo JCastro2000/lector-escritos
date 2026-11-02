@@ -133,6 +133,11 @@ export async function mount(root) {
     return true;
   }
 
+  // Tocar un libro de la nube lo descarga (para leerlo también sin conexión) y lo abre.
+  async function openRemote(it) {
+    if (await download(it, true)) location.hash = `#/read/${enc(it.id)}`;
+  }
+
   async function downloadAll(list) {
     let done = 0;
     for (const it of list) {
@@ -169,7 +174,9 @@ export async function mount(root) {
   function tile(it) {
     const downloaded = !!it.book;
     const loading = busy.has(it.id);
-    const cover = it.book?.cover ? h('img', { src: coverUrl(it.book.cover), alt: '', loading: 'lazy' }) : placeholder(it.title);
+    const cover = it.book?.cover ? h('img', { src: coverUrl(it.book.cover), alt: '', loading: 'lazy' })
+      : it.entry?.cover ? h('img', { src: `library/${it.entry.cover}`, alt: '', loading: 'lazy' })
+        : placeholder(it.title);
     const badge = downloaded
       ? h('span', { class: 'badge ok', title: 'Descargado' }, icon('check', 16))
       : h('span', { class: 'badge', title: 'Toca para descargar' }, loading ? h('span', { class: 'spin' }) : icon('download', 16));
@@ -178,7 +185,7 @@ export async function mount(root) {
     return h('div', { class: `tile${downloaded ? '' : ' remote'}` },
       downloaded
         ? h('a', { class: 'tile-link', href: `#/read/${enc(it.id)}` }, inner)
-        : h('button', { class: 'tile-link', disabled: loading, 'aria-label': `Descargar ${it.title}`, onclick: () => download(it) }, inner),
+        : h('button', { class: 'tile-link', disabled: loading, 'aria-label': `Descargar y abrir ${it.title}`, onclick: () => openRemote(it) }, inner),
       h('button', {
         class: `tile-fav iconbtn${it.fav ? ' on' : ''}`, 'aria-pressed': it.fav ? 'true' : 'false',
         'aria-label': it.fav ? `Quitar ${it.title} de favoritos` : `Añadir ${it.title} a favoritos`,
@@ -265,9 +272,6 @@ export async function mount(root) {
       body.append(shelf('Todos los libros', shown.map(tile), downloadBtn));
       return;
     }
-
-    const favShown = shown.filter((i) => i.fav);
-    if (favShown.length && prefs.mode === 'all' && !term) body.append(shelf('★ Favoritos', favShown.map(tile)));
 
     const groups = new Map();
     for (const it of shown) {

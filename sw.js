@@ -1,6 +1,6 @@
 // Service worker: deja la app disponible sin conexión.
 // Al cambiar cualquier archivo de la app, sube VERSION para que los teléfonos actualicen.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `lector-${VERSION}`;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',

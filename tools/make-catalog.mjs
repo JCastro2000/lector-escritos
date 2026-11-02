@@ -7,6 +7,7 @@
 // Si ya existe un books.json, conserva la "category" que hayas escrito a mano.
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
+import { readZip } from '../js/zip.js';
 
 const source = process.argv[2];
 if (!source) {
@@ -17,6 +18,30 @@ if (!source) {
 const root = resolve(import.meta.dirname, '..');
 const outDir = join(root, 'library');
 const jsonPath = join(outDir, 'books.json');
+
+const attr = (tag, name) => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
+
+// Extrae la portada del EPUB a library/covers/ y devuelve su ruta relativa (o null si no tiene).
+async function extractCover(epubPath, name) {
+  const raw = await readFile(epubPath);
+  const zip = readZip(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+  const opfPath = /full-path="([^"]+)"/.exec(await zip.text('META-INF/container.xml'))?.[1];
+  if (!opfPath) return null;
+  const opf = await zip.text(opfPath);
+  const dir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+  const metaCover = [...opf.matchAll(/<meta\b[^>]*>/g)].map((m) => m[0]).find((t) => attr(t, 'name') === 'cover');
+  const coverId = metaCover && attr(metaCover, 'content');
+  const item = [...opf.matchAll(/<item\b[^>]*>/g)].map((m) => m[0])
+    .find((t) => (coverId ? attr(t, 'id') === coverId : /properties="[^"]*cover-image/.test(t)));
+  const href = item && attr(item, 'href');
+  if (!href) return null;
+  const bytes = await zip.bytes(decodeURIComponent(new URL(href, 'http://x/' + dir).pathname.slice(1)));
+  if (!bytes) return null;
+  const rel = `covers/${name}${extname(href).toLowerCase() || '.jpg'}`;
+  await mkdir(join(outDir, 'covers'), { recursive: true });
+  await writeFile(join(outDir, rel), bytes);
+  return rel;
+}
 
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -35,6 +60,8 @@ for (const name of files) {
   const file = `${slug(title)}.epub`;
   await copyFile(join(source, name), join(outDir, file));
   const entry = { title, file, size: (await stat(join(outDir, file))).size };
+  const cover = await extractCover(join(outDir, file), slug(title));
+  if (cover) entry.cover = cover;
   const category = categoryByTitle.get(slug(title));
   if (category) entry.category = category;
   catalog.push(entry);
