@@ -1,0 +1,5 @@
+# Los libros NO se publican por accidente. Los textos en español de Elena G. de White tienen
+# derechos de autor (uso personal). Quita estas líneas solo si cuentas con autorización
+# para alojarlos; ver README.md.
+*.epub
+library/books.json
