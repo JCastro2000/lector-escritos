@@ -1,6 +1,7 @@
 // Arranque y navegación por hash: #/ (biblioteca), #/read/<libro>/<cap>/<bloque>, #/search, #/highlights, #/settings
 import { applySettings, followsSystemTheme } from './settings.js';
-import { installPrompt, h } from './ui.js';
+import { installPrompt, h, toast } from './ui.js';
+import * as db from './db.js';
 import * as library from './library.js';
 import * as reader from './reader.js';
 import * as search from './search.js';
@@ -24,7 +25,9 @@ if ('serviceWorker' in navigator) {
 
 history.scrollRestoration = 'manual';
 
-sync.start(); // solo hace algo si ya hay una sesión iniciada en este dispositivo
+db.events.addEventListener('migrating', () => toast('Optimizando el espacio de tus libros… solo pasa esta vez.', 6000));
+db.events.addEventListener('migrated', () => toast('Listo: tus libros ocupan mucho menos espacio.'));
+sync.start();// solo hace algo si ya hay una sesión iniciada en este dispositivo
 
 function parseHash() {
   const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');

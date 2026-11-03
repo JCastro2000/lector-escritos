@@ -11,20 +11,30 @@ export const notify = (type, detail = {}) => events.dispatchEvent(new CustomEven
 
 export const stamp = (h) => h.updated ?? h.created ?? 0;
 
+// Versión 2: el texto y el índice de búsqueda se guardan comprimidos, un registro por libro
+// (stores `text` e `index`). Los stores `chapters` y `search` de la versión 1 solo quedan en
+// dispositivos que ya tenían libros: `migrate` los vacía.
 let opening;
 function open() {
-  opening ??= new Promise((resolve, reject) => {
-    const rq = indexedDB.open('lector-escritos', 1);
-    rq.onupgradeneeded = () => {
-      const db = rq.result;
-      db.createObjectStore('books', { keyPath: 'id' });
-      db.createObjectStore('chapters', { keyPath: ['bookId', 'idx'] });
-      db.createObjectStore('search', { keyPath: ['bookId', 'idx'] }).createIndex('bookId', 'bookId');
-      db.createObjectStore('highlights', { keyPath: 'id' }).createIndex('bookId', 'bookId');
-    };
-    rq.onsuccess = () => resolve(rq.result);
-    rq.onerror = () => reject(rq.error);
-  });
+  if (!opening) {
+    opening = new Promise((resolve, reject) => {
+      const rq = indexedDB.open('lector-escritos', 2);
+      rq.onupgradeneeded = () => {
+        const db = rq.result;
+        const has = (name) => db.objectStoreNames.contains(name);
+        if (!has('books')) db.createObjectStore('books', { keyPath: 'id' });
+        if (!has('highlights')) db.createObjectStore('highlights', { keyPath: 'id' }).createIndex('bookId', 'bookId');
+        if (!has('text')) db.createObjectStore('text', { keyPath: 'bookId' });
+        if (!has('index')) db.createObjectStore('index', { keyPath: 'bookId' });
+      };
+      rq.onsuccess = () => {
+        rq.result.onversionchange = () => rq.result.close();
+        resolve(rq.result);
+      };
+      rq.onerror = () => reject(rq.error);
+    });
+    opening.then(ready).catch(() => {});
+  }
   return opening;
 }
 
@@ -50,9 +60,81 @@ export async function getBook(id) {
   return request(db.transaction('books').objectStore('books').get(id));
 }
 
+// ---------- Texto e índice comprimidos (gzip, un registro por libro) ----------
+
+const through = (data, stream) => new Response(new Blob([data]).stream().pipeThrough(stream));
+const pack = async (text) => new Uint8Array(await through(text, new CompressionStream('gzip')).arrayBuffer());
+const unpack = (bytes) => through(bytes, new DecompressionStream('gzip')).text();
+
+// Los párrafos del índice se separan con \n y los capítulos con \u0001 (se cambian por espacio
+// dentro del texto, lo que no altera longitudes ni búsquedas).
+const joinNorms = (chapters) => chapters
+  .map((norms) => norms.map((s) => s.replace(/[\n\u0001]/g, ' ')).join('\n'))
+  .join('\u0001');
+const splitNorms = (s) => s.split('\u0001').map((c) => c.split('\n'));
+
+// chapters: [{ title, blocks }]; norms: un arreglo de textos normalizados por capítulo.
+async function packBook(bookId, chapters, norms) {
+  const [text, index] = await Promise.all([pack(JSON.stringify(chapters)), pack(joinNorms(norms))]);
+  return { text: { bookId, data: text }, index: { bookId, data: index } };
+}
+
+// El capítulo se saca del libro descomprimido; se guardan los últimos en memoria.
+const texts = new Map();
+function bookText(bookId) {
+  if (!texts.has(bookId)) {
+    const load = (async () => {
+      await ready();
+      const db = await open();
+      const rec = await request(db.transaction('text').objectStore('text').get(bookId));
+      return rec ? JSON.parse(await unpack(rec.data)) : null;
+    })();
+    texts.set(bookId, load);
+    load.then((chapters) => !chapters && texts.delete(bookId), () => texts.delete(bookId));
+    if (texts.size > 4) texts.delete(texts.keys().next().value);
+  }
+  return texts.get(bookId);
+}
+
 export async function getChapter(bookId, idx) {
+  const chapter = (await bookText(bookId))?.[idx];
+  return chapter && { bookId, idx, title: chapter.title, blocks: chapter.blocks };
+}
+
+// Pasa los libros de la versión 1 (un registro por capítulo, sin comprimir) al formato nuevo.
+// Va de a un libro y cada uno es atómico: si se interrumpe, continúa en la próxima apertura.
+let migration;
+const ready = () => (migration ??= migrate().catch((e) => console.error('migración', e)));
+
+async function migrate() {
   const db = await open();
-  return request(db.transaction('chapters').objectStore('chapters').get([bookId, idx]));
+  if (!db.objectStoreNames.contains('chapters')) return;
+  const keys = await request(db.transaction('chapters').objectStore('chapters').getAllKeys());
+  const ids = [...new Set(keys.map(([id]) => id))];
+  if (!ids.length) return;
+  notify('migrating', { total: ids.length });
+  for (const id of ids) {
+    const read = db.transaction(['chapters', 'search']);
+    const [chapters, searches] = await Promise.all([
+      request(read.objectStore('chapters').getAll(bookRange(id))),
+      request(read.objectStore('search').getAll(bookRange(id))),
+    ]);
+    if (!chapters.length || !searches.length) continue; // otra pestaña ya lo migró
+    chapters.sort((a, b) => a.idx - b.idx);
+    searches.sort((a, b) => a.idx - b.idx);
+    const { text, index } = await packBook(
+      id,
+      chapters.map((c) => ({ title: c.title, blocks: c.blocks })),
+      searches.map((s) => s.norms),
+    );
+    const write = db.transaction(['text', 'index', 'chapters', 'search'], 'readwrite');
+    write.objectStore('text').put(text);
+    write.objectStore('index').put(index);
+    write.objectStore('chapters').delete(bookRange(id));
+    write.objectStore('search').delete(bookRange(id));
+    await complete(write);
+  }
+  notify('migrated');
 }
 
 // silent: no avisa del cambio (lo usa la sincronización para no volver a dispararse a sí misma).
@@ -79,58 +161,59 @@ export async function saveBook({ meta, cover, chapters }) {
     pos: prev?.pos ?? null,
     posSynced: prev?.posSynced ?? 0,
   };
+  const { text, index } = await packBook(
+    meta.id,
+    chapters.map((c) => ({ title: c.title, blocks: c.blocks.map((b) => ({ t: b.tag, c: b.cls, h: b.html, p: b.page })) })),
+    chapters.map((c) => c.blocks.map((b) => norm(b.text))),
+  );
+  await ready();
   const db = await open();
-  const tx = db.transaction(['books', 'chapters', 'search'], 'readwrite');
-  const range = bookRange(meta.id);
-  tx.objectStore('chapters').delete(range);
-  tx.objectStore('search').delete(range);
+  const tx = db.transaction(['books', 'text', 'index'], 'readwrite');
   tx.objectStore('books').put(book);
-  chapters.forEach((c, idx) => {
-    tx.objectStore('chapters').put({
-      bookId: meta.id,
-      idx,
-      title: c.title,
-      blocks: c.blocks.map((b) => ({ t: b.tag, c: b.cls, h: b.html, p: b.page })),
-    });
-    tx.objectStore('search').put({ bookId: meta.id, idx, norms: c.blocks.map((b) => norm(b.text)) });
-  });
+  tx.objectStore('text').put(text);
+  tx.objectStore('index').put(index);
   await complete(tx);
+  texts.delete(meta.id);
   notify('books');
   return book;
 }
 
 // Quita el libro del dispositivo. Los destacados se conservan.
 export async function deleteBook(id) {
+  await ready();
   const db = await open();
-  const tx = db.transaction(['books', 'chapters', 'search'], 'readwrite');
+  const tx = db.transaction(['books', 'text', 'index'], 'readwrite');
   tx.objectStore('books').delete(id);
-  tx.objectStore('chapters').delete(bookRange(id));
-  tx.objectStore('search').delete(bookRange(id));
+  tx.objectStore('text').delete(id);
+  tx.objectStore('index').delete(id);
   await complete(tx);
+  texts.delete(id);
   notify('books');
 }
 
 // Cuántos capítulos hay en el índice de búsqueda (de un libro o de todos).
 export async function countSearch(bookId) {
-  const db = await open();
-  const store = db.transaction('search').objectStore('search');
-  return request(bookId ? store.index('bookId').count(IDBKeyRange.only(bookId)) : store.count());
+  const books = bookId ? [await getBook(bookId)] : await listBooks();
+  return books.reduce((sum, b) => sum + (b?.toc.length ?? 0), 0);
 }
 
 // Recorre el índice de búsqueda (de un libro o de todos), un capítulo por vez.
 // Si `visit` devuelve false, se detiene (por ejemplo, porque ya hay otra búsqueda más nueva).
 export async function scanSearch(bookId, visit) {
+  await ready();
   const db = await open();
-  const store = db.transaction('search').objectStore('search');
-  const cursor = bookId ? store.index('bookId').openCursor(IDBKeyRange.only(bookId)) : store.openCursor();
-  await new Promise((resolve, reject) => {
-    cursor.onsuccess = () => {
-      const c = cursor.result;
-      if (!c || visit(c.value) === false) return resolve();
-      c.continue();
-    };
-    cursor.onerror = () => reject(cursor.error);
-  });
+  const ids = bookId ? [bookId] : await request(db.transaction('index').objectStore('index').getAllKeys());
+  const load = (id) => request(db.transaction('index').objectStore('index').get(id));
+  let next = ids.length ? load(ids[0]) : null;
+  for (let i = 0; i < ids.length; i++) {
+    const rec = await next;
+    next = i + 1 < ids.length ? load(ids[i + 1]) : null; // lee el siguiente mientras se descomprime éste
+    if (!rec) continue;
+    const chapters = splitNorms(await unpack(rec.data));
+    for (let idx = 0; idx < chapters.length; idx++) {
+      if (visit({ bookId: rec.bookId, idx, norms: chapters[idx] }) === false) return;
+    }
+  }
 }
 
 // ---------- Destacados ----------
